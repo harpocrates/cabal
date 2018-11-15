@@ -113,7 +113,8 @@ import           Distribution.Client.ProjectPlanOutput
 import           Distribution.Client.Types
                    ( GenericReadyPackage(..), UnresolvedSourcePackage
                    , PackageSpecifier(..)
-                   , SourcePackageDb(..) )
+                   , SourcePackageDb(..)
+                   , DocsResult(..) )
 import           Distribution.Solver.Types.PackageIndex
                    ( lookupPackageName )
 import qualified Distribution.Client.InstallPlan as InstallPlan
@@ -124,6 +125,7 @@ import           Distribution.Client.TargetSelector
 import           Distribution.Client.DistDirLayout
 import           Distribution.Client.Config (getCabalDir)
 import           Distribution.Client.Setup hiding (packageName)
+import qualified Distribution.Client.Haddock as Haddock
 import           Distribution.Types.ComponentName
                    ( componentNameString )
 import           Distribution.Types.UnqualComponentName
@@ -140,8 +142,9 @@ import           Distribution.Simple.LocalBuildInfo
                    ( ComponentName(..), pkgComponents )
 import qualified Distribution.Simple.Setup as Setup
 import           Distribution.Simple.Command (commandShowOptions)
-import           Distribution.Simple.Configure (computeEffectiveProfiling)
-
+import           Distribution.Simple.Compiler (compilerId)
+import           Distribution.Simple.Configure (computeEffectiveProfiling, getInstalledPackages)
+import qualified Distribution.Simple.PackageIndex as PackageIndex
 import           Distribution.Simple.Utils
                    ( die', warn, notice, noticeNoWrap, debugNoWrap )
 import           Distribution.Verbosity
@@ -382,6 +385,39 @@ runProjectPostBuildPhase verbosity
     --        - haddock/hoogle/ctags indexes
     --        - delete stale lib registrations
     --        - delete stale package dirs
+
+    -- Only regenerate the Haddock index if we (re)built some Haddocks
+    let units = Map.toList buildOutcomes
+        unitDocs = [ u | (u, Right (BuildResult DocsOk _ _)) <- units ]
+
+    when (not (null unitDocs)) $ do
+
+      -- Query the build plan to find the target units
+      let installPlan = InstallPlan.toList elaboratedPlanOriginal
+          pkgDbs = [ last (elabRegisterPackageDBStack elab)
+                   | InstallPlan.Configured elab <- installPlan
+                   ]
+
+          comp      = pkgConfigCompiler elaboratedShared
+          compId    = compilerId comp
+          platform  = pkgConfigPlatform elaboratedShared
+          progDb    = pkgConfigCompilerProgs elaboratedShared
+
+          indexFile = distHaddockIndexFile distDirLayout platform compId
+
+      notice verbosity $
+         "Updating local documentation index " ++ indexFile
+
+      -- TODO: there must be a better way of producing a package index that
+      --       includes all non-dependencies
+      pkgIndex <- getInstalledPackages verbosity comp pkgDbs progDb
+      let filteredPkgIndex = PackageIndex.fromList
+                               [ installedPkg
+                               | u <- unitDocs
+                               , let pkg = PackageIndex.lookupUnitId pkgIndex u
+                               , Just installedPkg <- [pkg]
+                               ]
+      Haddock.regenerateHaddockIndex verbosity filteredPkgIndex progDb indexFile
 
     postBuildStatus <- updatePostBuildProjectStatus
                          verbosity

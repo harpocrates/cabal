@@ -121,7 +121,10 @@ data DistDirLayout = DistDirLayout {
        distTempDirectory            :: FilePath,
        distBinDirectory             :: FilePath,
 
-       distPackageDB                :: CompilerId -> PackageDB
+       distPackageDB                :: CompilerId -> PackageDB,
+
+       -- | The location that a Haddock index gets written to.
+       distHaddockIndexFile         :: Platform -> CompilerId -> FilePath
      }
 
 
@@ -241,6 +244,12 @@ defaultDistDirLayout projectRoot mdistDirectory =
 
     distPackageDBPath compid = distDirectory </> "packagedb" </> display compid
     distPackageDB = SpecificPackageDB . distPackageDBPath
+
+    distHaddockIndexFile platform comp =
+        distBuildRootDirectory </>
+        display platform </>
+        display comp </>
+        "index.html"
 
 
 defaultStoreDirLayout :: FilePath -> StoreDirLayout

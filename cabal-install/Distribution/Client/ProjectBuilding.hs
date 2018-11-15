@@ -1055,7 +1055,8 @@ buildAndInstallUnpackedPackage verbosity
     -- shared bin dir.
 
     --TODO: [required feature] docs and test phases
-    let docsResult  = DocsNotTried
+    let docsResult  | hasValidHaddockTargets pkg = DocsOk
+                    | otherwise = DocsNotTried
         testsResult = TestsNotTried
 
     noticeProgress ProgressCompleted
@@ -1216,7 +1217,8 @@ buildInplaceUnpackedPackage verbosity
 
         -- Build phase
         --
-        let docsResult  = DocsNotTried
+        let docsResult  | hasValidHaddockTargets pkg = DocsOk
+                        | otherwise = DocsNotTried
             testsResult = TestsNotTried
 
             buildResult :: BuildResultMisc
